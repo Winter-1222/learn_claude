@@ -40,6 +40,7 @@ python -m ch01_agent_loop.code
 | [ch10](file:///e:/Agents/learn_claude_code/ch10_system_prompt/README.md) | System Prompt | 动态 Prompt | 运行时组装、确定性缓存、状态驱动 |
 | [ch11](file:///e:/Agents/learn_claude_code/ch11_error_recovery/README.md) | Error Recovery | 错误恢复 | 三条恢复路径、指数退避、Fallback 模型 |
 | [ch12](file:///e:/Agents/learn_claude_code/ch12_task_system/README.md) | Task System | 任务系统 | 文件持久化、依赖图、生命周期管理 |
+| [ch13](file:///e:/Agents/learn_claude_code/ch13_background_tasks/README.md) | Background Tasks | 后台任务 | 线程异步执行、通知注入、线程安全 |
 
 ### 学习路径建议
 
@@ -69,6 +70,9 @@ python -m ch01_agent_loop.code
 
 第 7 周：任务管理
     └── ch12: 任务系统（依赖图、持久化）
+
+第 8 周：异步执行
+    └── ch13: 后台任务（线程异步、通知注入）
 ```
 
 ---
@@ -89,6 +93,7 @@ learn_claude_code/
 ├── ch10_system_prompt/       # 动态 Prompt
 ├── ch11_error_recovery/      # 错误恢复
 ├── ch12_task_system/         # 任务系统
+├── ch13_background_tasks/    # 后台任务
 ├── skills/                   # 技能文件目录
 │   ├── agent-builder/        # 代理构建技能
 │   ├── code-review/          # 代码审查技能
@@ -142,6 +147,7 @@ LLM 推理（思考应该做什么）
 | ch10 | 动态 Prompt、确定性缓存 | 记忆系统、压缩管道、技能 |
 | ch11 | 三条恢复路径、指数退避、Fallback | 动态 Prompt、记忆系统、压缩管道 |
 | ch12 | 文件持久化任务系统、依赖图、生命周期 | 动态 Prompt、记忆系统 |
+| ch13 | 后台任务、线程异步执行、通知注入 | 任务系统、动态 Prompt、记忆系统 |
 
 ---
 
