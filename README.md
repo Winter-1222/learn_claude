@@ -42,6 +42,7 @@ python -m ch01_agent_loop.code
 | [ch12](file:///e:/Agents/learn_claude_code/ch12_task_system/README.md) | Task System | 任务系统 | 文件持久化、依赖图、生命周期管理 |
 | [ch13](file:///e:/Agents/learn_claude_code/ch13_background_tasks/README.md) | Background Tasks | 后台任务 | 线程异步执行、通知注入、线程安全 |
 | [ch14](file:///e:/Agents/learn_claude_code/ch14_cron_scheduler/README.md) | Cron Scheduler | 定时调度 | 四层架构、cron 表达式、队列处理器 |
+| [s18](file:///e:/Agents/learn_claude_code/s18_worktree_isolation/README.md) | Worktree Isolation | 工作树隔离 | Git worktree、文件级隔离、多 Agent 协作 |
 
 ### 学习路径建议
 
@@ -77,6 +78,9 @@ python -m ch01_agent_loop.code
 
 第 9 周：定时调度
     └── ch14: Cron 调度器（四层架构、cron 表达式）
+
+第 10 周：多 Agent 隔离
+    └── s18: Worktree 隔离（Git worktree、文件级隔离）
 ```
 
 ---
@@ -99,6 +103,7 @@ learn_claude_code/
 ├── ch12_task_system/         # 任务系统
 ├── ch13_background_tasks/    # 后台任务
 ├── ch14_cron_scheduler/      # Cron 调度器
+├── s18_worktree_isolation/   # Worktree 隔离
 ├── skills/                   # 技能文件目录
 │   ├── agent-builder/        # 代理构建技能
 │   ├── code-review/          # 代码审查技能
@@ -154,6 +159,7 @@ LLM 推理（思考应该做什么）
 | ch12 | 文件持久化任务系统、依赖图、生命周期 | 动态 Prompt、记忆系统 |
 | ch13 | 后台任务、线程异步执行、通知注入 | 任务系统、动态 Prompt、记忆系统 |
 | ch14 | Cron 调度器、四层架构、cron 表达式匹配 | 后台任务、任务系统、动态 Prompt |
+| s18 | Worktree 隔离、Git worktree、文件级隔离 | 任务系统、消息总线、协议状态、自主 Agent |
 
 ---
 
