@@ -36,6 +36,8 @@ python -m ch01_agent_loop.code
 | [ch06](file:///e:/Agents/learn_claude_code/ch06_subagent/README.md) | Subagent | 子代理系统 | 任务分解、上下文隔离、递归限制 |
 | [ch07](file:///e:/Agents/learn_claude_code/ch07_skill_loading/README.md) | Skill Loading | 技能加载 | 两级知识注入、技能注册表 |
 | [ch08](file:///e:/Agents/learn_claude_code/ch08_context_compact/README.md) | Context Compact | 上下文压缩 | 四层压缩管道、大结果持久化 |
+| [ch09](file:///e:/Agents/learn_claude_code/ch09_memory/README.md) | Memory | 记忆系统 | 跨会话持久化、索引检索、自动合并 |
+| [ch10](file:///e:/Agents/learn_claude_code/ch10_system_prompt/README.md) | System Prompt | 动态 Prompt | 运行时组装、确定性缓存、状态驱动 |
 
 ### 学习路径建议
 
@@ -51,10 +53,14 @@ python -m ch01_agent_loop.code
 第 3 周：智能增强
     ├── ch05: 添加任务规划功能
     └── ch06: 实现子代理系统
-
+```
 第 4 周：高级功能
     ├── ch07: 技能加载系统
     └── ch08: 上下文压缩管道
+
+第 5 周：持久化与优化
+    ├── ch09: 记忆系统（跨会话知识）
+    └── ch10: 动态 Prompt（运行时组装）
 ```
 
 ---
@@ -71,6 +77,8 @@ learn_claude_code/
 ├── ch06_subagent/            # 子代理系统
 ├── ch07_skill_loading/       # 技能加载
 ├── ch08_context_compact/     # 上下文压缩
+├── ch09_memory/              # 记忆系统
+├── ch10_system_prompt/       # 动态 Prompt
 ├── skills/                   # 技能文件目录
 │   ├── agent-builder/        # 代理构建技能
 │   ├── code-review/          # 代码审查技能
@@ -120,6 +128,8 @@ LLM 推理（思考应该做什么）
 | ch06 | task 工具、子代理 | todo、钩子、权限 |
 | ch07 | load_skill、技能注册表 | 子代理、todo、钩子 |
 | ch08 | 四层压缩管道 | 技能、子代理、todo |
+| ch09 | 记忆系统、索引检索、自动合并 | 压缩管道、技能、子代理 |
+| ch10 | 动态 Prompt、确定性缓存 | 记忆系统、压缩管道、技能 |
 
 ---
 
