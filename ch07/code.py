@@ -1,49 +1,96 @@
 """
-s06: Subagent — spawn sub-agents with fresh messages[] for context isolation.
+s07: Skill Loading — two-level on-demand knowledge injection.
 
-  Parent Agent                           Subagent
-  +------------------+                  +------------------+
-  | messages=[...]   |                  | messages=[task]  | <-- fresh
-  |                  |   dispatch       |                  |
-  | tool: task       | ---------------> | own while loop   |
-  |   prompt="..."   |                  |   bash/read/...  |
-  |                  |   summary only   |   (max 30 turns) |
-  | result = "..."   | <--------------- | return last text |
-  +------------------+                  +------------------+
-        ^                                      |
-        |       intermediate results DISCARDED  |
-        +--------------------------------------+
+  Layer 1 (cheap, always present):
+    SYSTEM prompt includes skill names + one-line descriptions (~100 tokens/skill)
+    "Skills available: agent-builder, code-review, mcp-builder, pdf"
 
-  Subagent tools: bash, read, write, edit, glob (NO task — no recursion)
+  Layer 2 (expensive, on demand):
+    Agent calls load_skill("code-review") → full SKILL.md content
+    injected via tool_result (~2000 tokens/skill)
 
-Changes from s05:
-  + task tool + spawn_subagent() with fresh messages[]
-  + Safety limit: max 30 turns per subagent
-  + extract_text() helper
-  Subagent cannot spawn sub-subagents (no task tool in sub_tools).
-  Main loop unchanged: task auto-dispatches via TOOL_HANDLERS.
+  skills/
+    agent-builder/SKILL.md
+    code-review/SKILL.md
+    mcp-builder/SKILL.md
+    pdf/SKILL.md
+
+Changes from s06:
+  + build_system() — scan skills/ dir at startup, inject catalog into SYSTEM
+  + load_skill(name) — return full SKILL.md content via tool_result
+  + SKILLS_DIR config
+  Loop unchanged: load_skill auto-dispatches via TOOL_HANDLERS.
 """
 
 import ast, json, os, subprocess
 from anthropic import Anthropic
 from dotenv import load_dotenv
 from pathlib import Path
+import yaml
 
 load_dotenv(override=True)
 
 client = Anthropic(base_url=os.getenv("ANTHROPIC_BASE_URL"))
 MODEL = os.environ["MODEL_ID"]
 WORKDIR = Path.cwd()
+SKILLS_DIR = WORKDIR / "skills"
 CURRENT_TODOS: list[dict] = []
-# 05 change: SYSTEM prompt adds planning guidance
-SYSTEM = (
-    f"You are a coding agent at {WORKDIR}."
-    "Before starting any multi-step task, use todo_write to plan your steps."
-    "Update status as you go.Use bash to solve tasks. Act, don't explain."
-    "For complex sub-problems, use the task tool to spawn a subagent."
-    "当前环境是windows环境下。"
-)
-# s06: subagent gets its own system prompt — no task, no recursion
+
+# s07: Skill catalog scan (used by build_system below)
+def _parse_frontmatter(text: str) -> tuple[dict, str]:
+    """Parse YAML frontmatter from SKILL.md. Returns (meta, body)."""
+    if not text.startswith("---"):
+        return {}, text
+    parts = text.split("---", 2)
+    if len(parts) < 3:
+        return {}, text
+    try:
+        meta = yaml.safe_load(parts[1]) or {}
+    except yaml.YAMLError:
+        meta = {}
+    return meta, parts[2].strip()
+
+# Build skill registry at startup (used for safe lookup in load_skill)
+SKILL_REGISTRY: dict[str, dict] = {}
+
+def _scan_skills():
+    """Scan skills/ dir, populate SKILL_REGISTRY with name/description/content."""
+    if not SKILLS_DIR.exists():
+        return
+    for d in sorted(SKILLS_DIR.iterdir()):
+        if not d.is_dir():
+            continue
+        manifest = d / "SKILL.md"
+        if manifest.exists():
+            raw = manifest.read_text()
+            meta, body = _parse_frontmatter(raw)
+            name = meta.get("name", d.name)
+            desc = meta.get("description", raw.split("\n")[0].lstrip("#").strip())
+            SKILL_REGISTRY[name] = {"name": name, "description": desc, "content": raw}
+
+_scan_skills()
+
+def list_skills() -> str:
+    """List all skills (name + one-line description)."""
+    if not SKILL_REGISTRY:
+        return "(no skills found)"
+    return "\n".join(f"- **{s['name']}**: {s['description']}" for s in SKILL_REGISTRY.values())
+
+# s07: SYSTEM includes skill catalog (cheap — just names + descriptions)
+def build_system() -> str:
+    """Build SYSTEM prompt with skill catalog injected at startup."""
+    catalog = list_skills()
+    return (
+        f"You are a coding agent at {WORKDIR}. "
+        f"Skills available:\n{catalog}\n"
+        "Use load_skill to get full details when needed."
+        "Before starting any multi-step task, use todo_write to plan your steps."
+        "Update status as you go.Use bash to solve tasks. Act, don't explain."
+        "For complex sub-problems, use the task tool to spawn a subagent."
+        "当前环境是windows环境下。"
+    )
+SYSTEM = build_system()
+# s07: subagent gets its own system prompt — no task, no recursion, no skill loading
 SUB_SYSTEM = (
     f"You are a coding agent at {WORKDIR}. "
     "Complete the task you were given, then return a concise summary. "
@@ -194,6 +241,17 @@ def spawn_subagent(description: str) -> str:
             result = "Subagent stopped after 30 turns without final answer."
     print(f"\033[35m[Subagent done]\033[0m")
     return result  # only summary, entire message history discarded
+
+# ═══════════════════════════════════════════════════════════
+#  NEW in s07: load_skill — runtime full content loading
+# ═══════════════════════════════════════════════════════════
+def load_skill(name: str) -> str:
+    """Load full skill content. Lookup via registry — no path traversal."""
+    skill = SKILL_REGISTRY.get(name)
+    if not skill:
+        return f"Skill not found: {name}"
+    return skill["content"]
+
 # ── Tool definition ────────────────────────────
 TOOLS = [
     {
@@ -244,24 +302,31 @@ TOOLS = [
             "type": "object", 
             "properties": {"todos": {"type": "array", "items": {"type": "object", "properties": {"content": {"type": "string"}, "status": {"type": "string", "enum": ["pending", "in_progress", "completed"]}}, 
             "required": ["content", "status"]}}}, 
-            "required": ["todos"]}},
+            "required": ["todos"]}
+    },
+    {
+        "name": "task", 
+        "description": "Launch a subagent to handle a complex subtask. Returns only the final conclusion.",
+        "input_schema": {
+            "type": "object", 
+            "properties": {"description": {"type": "string"}}, 
+            "required": ["description"]}
+    },
+    # s07: skill tool (catalog is already in SYSTEM prompt, this loads full content)
+    {
+        "name": "load_skill", 
+        "description": "Load the full content of a skill by name.",
+        "input_schema": {
+            "type": "object", 
+            "properties": {"name": {"type": "string"}}, 
+            "required": ["name"]}
+    },
 ]
-
-# ═══════════════════════════════════════════════════════════
-#  NEW in s02: 工具分发映射（s01 是硬编码 run_bash，现在改为查表）
-# ═══════════════════════════════════════════════════════════
-
 TOOL_HANDLERS = {
     "bash": run_bash, "read_file": run_read, "write_file": run_write,
     "edit_file": run_edit, "glob": run_glob, "todo_write": run_todo_write,
+    "task": spawn_subagent, "load_skill": load_skill,
 }
-# Add task tool to parent's tools
-TOOLS.append({
-    "name": "task",
-    "description": "Launch a subagent to handle a complex subtask. Returns only the final conclusion.",
-    "input_schema": {"type": "object", "properties": {"description": {"type": "string"}}, "required": ["description"]},
-})
-TOOL_HANDLERS["task"] = spawn_subagent
 # ═══════════════════════════════════════════════════════════
 #  NEW in s06: Subagent — fresh messages[], summary only
 # ═══════════════════════════════════════════════════════════
@@ -440,12 +505,12 @@ def agent_loop(messages: list):
 
 
 if __name__ == "__main__":
-    print("s06: Subagent — spawn sub-agents with fresh context, summary only")
+    print("s07: Skill Loading — catalog in SYSTEM, content on demand")
     print("输入问题，回车发送。输入 q 退出。\n")
     history = []
     while True:
         try:
-            query = input("\033[36ms06 >> \033[0m")
+            query = input("\033[36ms07 >> \033[0m")
         except (EOFError, KeyboardInterrupt):
             break
         if query.lower() == "q":
