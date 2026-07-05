@@ -4,7 +4,7 @@
 
 ```bash
 conda activate learnclaude
-python -m ch06.code
+python -m ch06_subagent.code
 ```
 
 测试 prompt：`请创建一个完整的 Python 项目，包含多个模块和测试文件，然后总结项目结构`

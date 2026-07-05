@@ -4,7 +4,7 @@
 
 ```bash
 conda activate learnclaude
-python -m ch07.code
+python -m ch07_skill_loading.code
 ```
 
 测试 prompt：`请使用 code-review 技能来审查 ch06/code.py 的代码`

@@ -7,7 +7,7 @@ conda create -n learnclaude python=3.11 -y
 conda activate learnclaude
 pip install -r requirements.txt
 copy .env.example .env
-python -m ch01.code
+python -m ch01_agent_loop.code
 ```
 
 运行后输入：`Create a file called hello.py that prints "Hello, World!"`

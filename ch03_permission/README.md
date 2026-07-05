@@ -4,7 +4,7 @@
 
 ```bash
 conda activate learnclaude
-python -m ch03.code
+python -m ch03_permission.code
 ```
 
 测试 prompt：`删除当前目录下所有 .txt 文件`

@@ -4,7 +4,7 @@
 
 ```bash
 conda activate learnclaude
-python -m ch05.code
+python -m ch05_todo_write.code
 ```
 
 测试 prompt：`请在ch05目录下创建一个新的文件夹，其中包含 Hello World 脚本和 README 文件`

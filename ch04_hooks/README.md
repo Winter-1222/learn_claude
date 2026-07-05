@@ -4,7 +4,7 @@
 
 ```bash
 conda activate learnclaude
-python -m ch04.code
+python -m ch04_hooks.code
 ```
 
 测试 prompt：`请列出当前目录下所有文件，然后读取 ch01/README.md 的内容`

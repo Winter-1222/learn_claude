@@ -4,7 +4,7 @@
 
 ```bash
 conda activate learnclaude
-python -m ch02.code
+python -m ch02_tool_use.code
 ```
 
 测试 prompt：`请阅读ch01\README.md,然后给我一个总结。`
