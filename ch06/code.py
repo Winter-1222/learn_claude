@@ -1,27 +1,27 @@
 """
-05: TodoWrite — add a planning tool on top of 04 hooks.
+s06: Subagent — spawn sub-agents with fresh messages[] for context isolation.
 
-  +---------+      +-------+      +------------------+
-  |  User   | ---> |  LLM  | ---> | TOOL_HANDLERS    |
-  | prompt  |      |       |      |  bash            |
-  +---------+      +---+---+      |  read_file       |
-                        ^         |  write_file      |
-                        | result  |  edit_file       |
-                        +---------+  glob            |
-                                      todo_write ← NEW
-                                   +------------------+
-                                        |
-                         in-memory current_todos
-                                        |
-                        if rounds_since_todo >= 3:
-                          inject <reminder>
+  Parent Agent                           Subagent
+  +------------------+                  +------------------+
+  | messages=[...]   |                  | messages=[task]  | <-- fresh
+  |                  |   dispatch       |                  |
+  | tool: task       | ---------------> | own while loop   |
+  |   prompt="..."   |                  |   bash/read/...  |
+  |                  |   summary only   |   (max 30 turns) |
+  | result = "..."   | <--------------- | return last text |
+  +------------------+                  +------------------+
+        ^                                      |
+        |       intermediate results DISCARDED  |
+        +--------------------------------------+
 
-Changes from 04:
-  + todo_write tool + run_todo_write() implementation
-  + Nag reminder (inject reminder after 3 rounds without todo update)
-  + SYSTEM prompt includes "plan before execute" guidance
-  + rounds_since_todo counter in agent_loop
-  Loop unchanged: new tool auto-dispatches via TOOL_HANDLERS.
+  Subagent tools: bash, read, write, edit, glob (NO task — no recursion)
+
+Changes from s05:
+  + task tool + spawn_subagent() with fresh messages[]
+  + Safety limit: max 30 turns per subagent
+  + extract_text() helper
+  Subagent cannot spawn sub-subagents (no task tool in sub_tools).
+  Main loop unchanged: task auto-dispatches via TOOL_HANDLERS.
 """
 
 import ast, json, os, subprocess
@@ -40,9 +40,15 @@ SYSTEM = (
     f"You are a coding agent at {WORKDIR}."
     "Before starting any multi-step task, use todo_write to plan your steps."
     "Update status as you go.Use bash to solve tasks. Act, don't explain."
+    "For complex sub-problems, use the task tool to spawn a subagent."
     "当前环境是windows环境下。"
 )
-
+# s06: subagent gets its own system prompt — no task, no recursion
+SUB_SYSTEM = (
+    f"You are a coding agent at {WORKDIR}. "
+    "Complete the task you were given, then return a concise summary. "
+    "Do not delegate further."
+)
 # ── Tool execution ────────────────────────────────────────
 def run_bash(command: str) -> str:
     dangerous = ["rm -rf /", "sudo", "shutdown", "reboot", "> /dev/"]
@@ -140,7 +146,55 @@ def run_todo_write(todos: list) -> str:
         lines.append(f"  [{icon}] {t['content']}")
     print("\n".join(lines))
     return f"Updated {len(CURRENT_TODOS)} tasks"
-# ── Tool definition: just bash ────────────────────────────
+
+def extract_text(content) -> str:
+    """Extract text from message content blocks."""
+    if not isinstance(content, list):
+        return str(content)
+    return "\n".join(getattr(b, "text", "") for b in content if getattr(b, "type", None) == "text")
+
+def spawn_subagent(description: str) -> str:
+    """Spawn a subagent with fresh messages[], return summary only."""
+    print(f"\n\033[35m[Subagent spawned]\033[0m")
+    messages = [{"role": "user", "content": description}]  # fresh context
+    for _ in range(30):  # safety limit
+        response = client.messages.create(
+            model=MODEL, system=SUB_SYSTEM,
+            messages=messages, tools=SUB_TOOLS, max_tokens=8000,
+        )
+        messages.append({"role": "assistant", "content": response.content})
+        if response.stop_reason != "tool_use":
+            break
+        results = []
+        for block in response.content:
+            if block.type == "tool_use":
+                # Issue 1: subagent also runs hooks (permissions apply)
+                blocked = trigger_hooks("PreToolUse", block)
+                if blocked:
+                    results.append({"type": "tool_result", "tool_use_id": block.id,
+                                    "content": str(blocked)})
+                    continue
+                handler = SUB_HANDLERS.get(block.name)
+                output = handler(**block.input) if handler else f"Unknown: {block.name}"
+                trigger_hooks("PostToolUse", block, output)
+                print(f"  \033[90m[sub] {block.name}: {str(output)[:100]}\033[0m")
+                results.append({"type": "tool_result", "tool_use_id": block.id,
+                                "content": output})
+        messages.append({"role": "user", "content": results})
+    # Issue 5: fallback if safety limit hit during tool_use
+    result = extract_text(messages[-1]["content"])
+    if not result:
+        # last message is tool_result, look backwards for assistant text
+        for msg in reversed(messages):
+            if msg["role"] == "assistant":
+                result = extract_text(msg["content"])
+                if result:
+                    break
+        if not result:
+            result = "Subagent stopped after 30 turns without final answer."
+    print(f"\033[35m[Subagent done]\033[0m")
+    return result  # only summary, entire message history discarded
+# ── Tool definition ────────────────────────────
 TOOLS = [
     {
         "name": "bash",
@@ -200,6 +254,35 @@ TOOLS = [
 TOOL_HANDLERS = {
     "bash": run_bash, "read_file": run_read, "write_file": run_write,
     "edit_file": run_edit, "glob": run_glob, "todo_write": run_todo_write,
+}
+# Add task tool to parent's tools
+TOOLS.append({
+    "name": "task",
+    "description": "Launch a subagent to handle a complex subtask. Returns only the final conclusion.",
+    "input_schema": {"type": "object", "properties": {"description": {"type": "string"}}, "required": ["description"]},
+})
+TOOL_HANDLERS["task"] = spawn_subagent
+# ═══════════════════════════════════════════════════════════
+#  NEW in s06: Subagent — fresh messages[], summary only
+# ═══════════════════════════════════════════════════════════
+
+SUB_TOOLS = [
+    {"name": "bash", "description": "Run a shell command.",
+     "input_schema": {"type": "object", "properties": {"command": {"type": "string"}}, "required": ["command"]}},
+    {"name": "read_file", "description": "Read file contents.",
+     "input_schema": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}},
+    {"name": "write_file", "description": "Write content to a file.",
+     "input_schema": {"type": "object", "properties": {"path": {"type": "string"}, "content": {"type": "string"}}, "required": ["path", "content"]}},
+    {"name": "edit_file", "description": "Replace exact text in a file once.",
+     "input_schema": {"type": "object", "properties": {"path": {"type": "string"}, "old_text": {"type": "string"}, "new_text": {"type": "string"}}, "required": ["path", "old_text", "new_text"]}},
+    {"name": "glob", "description": "Find files matching a glob pattern.",
+     "input_schema": {"type": "object", "properties": {"pattern": {"type": "string"}}, "required": ["pattern"]}},
+]
+# NO "task" tool — prevent recursive spawning
+
+SUB_HANDLERS = {
+    "bash": run_bash, "read_file": run_read, "write_file": run_write,
+    "edit_file": run_edit, "glob": run_glob,
 }
 # ═══════════════════════════════════════════════════════════
 #  NEW in s04: Hook System (s03 permission logic now via hooks)
@@ -357,7 +440,7 @@ def agent_loop(messages: list):
 
 
 if __name__ == "__main__":
-    print("s05: TodoWrite — plan before execute, nag if you forget")
+    print("s06: Subagent — spawn sub-agents with fresh context, summary only")
     print("输入问题，回车发送。输入 q 退出。\n")
     history = []
     while True:
